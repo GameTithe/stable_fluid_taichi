@@ -5,7 +5,7 @@ ti.init(arch=ti.gpu)
 
 NDIM = 2 
 
-N = ti.Vector([128, 128])
+N = ti.Vector([256, 256])
 #grid = ti.Vector.field(NDIM, dtype = ti.i32, shape = (N[0], N[1]))
 divergence = ti.field(dtype = ti.f32, shape = (N[0] + 2, N[1] + 2))
 
@@ -31,12 +31,12 @@ D1 = ti.Vector.field(NDIM, dtype = ti.f32, shape = (N[0] + 2, N[1] + 2))
 S0 = ti.Vector.field(NDIM, dtype = ti.f32, shape = (1, ))
 S1 = ti.Vector.field(NDIM, dtype = ti.f32, shape = (1, ))
 
-visc = 0.0001
+visc = 0.001
 grav2D = ti.Vector([0.0 , -9.8])
 grav3D = ti.Vector([0.0 , -9.8, 0.0])
 
 #diffusion const 
-kd = 0.001
+kd = 0.01
 
 #source const 
 aS = 0.001
@@ -68,37 +68,40 @@ def SwapS():
 def SwapD():
     global D0, D1
     D0, D1 = D1, D0 
-    
-#@ti.kernel
+     
 @ti.func
 def AddSource_D(mouse_pos: ti.types.vector(2, ti.f32)):
    
     index = ti.cast(mouse_pos * N, ti.i32) 
-    
-    minX = max(index.x - 3, 1)
-    minY = max(index.y - 3, 1)
-    
-    maxX = min(index.x + 3, N[0])
-    maxY = min(index.y + 3, N[0])
+    radius = 3
+    minX = max(index.x - radius, 1)
+    minY = max(index.y - radius, 1)  
+    maxX = min(index.x + radius, N[0])
+    maxY = min(index.y + radius, N[0])
     
         
     for i, j in ti.ndrange( (minX, maxX + 1 ), (minY, maxY + 1)):
-        D1[i, j] += ti.Vector([15.0, 0.0])  
+        dist = (ti.cast((i - index.x)**2 + (j - index.y)**2, ti.f32))
+        if dist <= radius * radius:   
+            D1[i, j] += ti.Vector([dist * 0.5, 0.0])
+
         
 @ti.func
 def AddSource_U(mouse_pos: ti.types.vector(2, ti.f32)):
    
     index = ti.cast(mouse_pos * N, ti.i32) 
+    radius = 2
     
-    minX = max(index.x - 3, 1)
-    minY = max(index.y - 3, 1)
-    
-    maxX = min(index.x + 3, N[0])
-    maxY = min(index.y + 3, N[0])
+    minX = max(index.x - radius, 1)
+    minY = max(index.y - radius, 1)  
+    maxX = min(index.x + radius, N[0])
+    maxY = min(index.y + radius, N[0])
     
         
     for i, j in ti.ndrange( (minX, maxX + 1 ), (minY, maxY + 1)): 
-        U1[i, j] += ti.Vector([0.0, 10.0]) 
+        dist = (ti.cast((i - index.x)**2 + (j - index.y)**2, ti.f32))
+        if dist <= radius * radius:
+            U1[i, j] += ti.Vector([0.0, dist]) 
         
 @ti.func
 def set_bnd(b: ti.i32, x: ti.template()):
@@ -138,44 +141,98 @@ def Project():
     set_bnd(1, U1)  # x 방향 속도
     set_bnd(2, U1)  # y 방향 속도
  
-@ti.func
-def Advect():
+# @ti.func
+# def Advect():
     
+#     dt0 = dt * N[0]
+#     for i, j in ti.ndrange( ( 1, N[0]), (1 , N[1])):
+        
+#         pos = ti.Vector([i - U0[i,j].x * dt0, j - U0[i,j].y * dt0]) 
+        
+#         pos.x = ti.min(ti.max(pos.x, 0.5), N[0] + 0.5)
+#         pos.y = ti.min(ti.max(pos.y, 0.5), N[1] + 0.5)
+        
+#         #boundary check
+#         i0 = ti.cast(pos.x, ti.i32)
+#         j0 = ti.cast(pos.y, ti.i32) 
+#         i1 = i0 + 1
+#         j1 = j0 + 1
+
+#         #interpolation
+#         s1 = pos.x - i0
+#         s0 = 1 - s1
+#         t1 = pos.y - j0
+#         t0 = 1 - t1
+          
+#         D1[i, j] = s0 * (t0 * D0[i0, j0] + t1 * D0[i0, j1]) + s1 * (t0 * D0[i1, j0] + t1 * D0[i1, j1])
+#     set_bnd(0, D1)
+
+
+@ti.func
+def Advect_D():
     dt0 = dt * N[0]
-    for i, j in ti.ndrange( ( 1, N[0]), (1 , N[1])):
-        
-        pos = ti.Vector([i - U0[i,j].x * dt0, j - U0[i,j].y * dt0]) 
-        
+    for i, j in ti.ndrange((1, N[0] + 1), (1, N[1] + 1)):
+        pos = ti.Vector([i - U0[i, j].x * dt0, j - U0[i, j].y * dt0])
         pos.x = ti.min(ti.max(pos.x, 0.5), N[0] + 0.5)
         pos.y = ti.min(ti.max(pos.y, 0.5), N[1] + 0.5)
-        
-        #boundary check
         i0 = ti.cast(pos.x, ti.i32)
-        j0 = ti.cast(pos.y, ti.i32) 
+        j0 = ti.cast(pos.y, ti.i32)
         i1 = i0 + 1
         j1 = j0 + 1
-
-        #interpolation
         s1 = pos.x - i0
         s0 = 1 - s1
         t1 = pos.y - j0
         t0 = 1 - t1
-          
         D1[i, j] = s0 * (t0 * D0[i0, j0] + t1 * D0[i0, j1]) + s1 * (t0 * D0[i1, j0] + t1 * D0[i1, j1])
     set_bnd(0, D1)
 
 @ti.func
-def Diffuse():
+def Advect_U():
+    dt0 = dt * N[0]
+    for i, j in ti.ndrange((1, N[0] + 1), (1, N[1] + 1)):
+        pos = ti.Vector([i - U0[i, j].x * dt0, j - U0[i, j].y * dt0])
+        pos.x = ti.min(ti.max(pos.x, 0.5), N[0] + 0.5)
+        pos.y = ti.min(ti.max(pos.y, 0.5), N[1] + 0.5)
+        i0 = ti.cast(pos.x, ti.i32)
+        j0 = ti.cast(pos.y, ti.i32)
+        i1 = i0 + 1
+        j1 = j0 + 1
+        s1 = pos.x - i0
+        s0 = 1 - s1
+        t1 = pos.y - j0
+        t0 = 1 - t1
+        U1[i, j] = s0 * (t0 * U0[i0, j0] + t1 * U0[i0, j1]) + s1 * (t0 * U0[i1, j0] + t1 * U0[i1, j1])
+    set_bnd(1, U1)
+    set_bnd(2, U1)
 
-    # boundary check
+# @ti.func
+# def Diffuse():
+
+#     # boundary check
     
-    for k in ti.static(range(20)) :
-        for i, j in ti.ndrange( ( 1, N[0] + 1), ( 1, N[1] + 1) ):
-            D1[i, j] = (D0[i ,j] + kd * ( D0[i - 1, j] + D0[i + 1, j] + D0[i,j -1] + D0[i, j  + 1])) / (1 + 4 * kd)
-            #D1[i, j] = (D0[i ,j] + kd * ( D1[i - 1, j] + D1[i + 1, j] + D1[i,j -1] + D1[i, j  + 1])) / (1 + 4 * kd)
+#     for k in ti.static(range(20)) :
+#         for i, j in ti.ndrange( ( 1, N[0] + 1), ( 1, N[1] + 1) ):
+#             D1[i, j] = (D0[i ,j] + kd * ( D0[i - 1, j] + D0[i + 1, j] + D0[i,j -1] + D0[i, j  + 1])) / (1 + 4 * kd)
+#             #D1[i, j] = (D0[i ,j] + kd * ( D1[i - 1, j] + D1[i + 1, j] + D1[i,j -1] + D1[i, j  + 1])) / (1 + 4 * kd)
 
-        set_bnd(0, D1)
-    # boundary check
+#         set_bnd(0, D1)
+#     # boundary check
+    
+    
+@ti.func
+def Diffuse_D():
+    for k in ti.static(range(20)):
+        for i, j in ti.ndrange((1, N[0] + 1), (1, N[1] + 1)):
+            D1[i, j] = (D0[i, j] + kd * (D0[i - 1, j] + D0[i + 1, j] + D0[i, j - 1] + D0[i, j + 1])) / (1 + 4 * kd)
+    set_bnd(0, D1)
+
+@ti.func
+def Diffuse_U():
+    for k in ti.static(range(20)):
+        for i, j in ti.ndrange((1, N[0] + 1), (1, N[1] + 1)):
+            U1[i, j] = (U0[i, j] + visc * (U0[i - 1, j] + U0[i + 1, j] + U0[i, j - 1] + U0[i, j + 1])) / (1 + 4 * visc)
+    set_bnd(1, U1)
+    set_bnd(2, U1)
     
 @ti.kernel
 def dens_step(mouse_pos: ti.types.vector(2, ti.f32), add_force: ti.i32):
@@ -184,10 +241,10 @@ def dens_step(mouse_pos: ti.types.vector(2, ti.f32), add_force: ti.i32):
         AddSource_D(mouse_pos)
     
     SwapD()
-    Diffuse()
+    Diffuse_D()
     
     SwapD()
-    Advect()
+    Advect_D()
     
 @ti.kernel
 def vel_step(mouse_pos: ti.types.vector(2, ti.f32), add_force: ti.i32):
@@ -196,12 +253,12 @@ def vel_step(mouse_pos: ti.types.vector(2, ti.f32), add_force: ti.i32):
         AddSource_U(mouse_pos)
     
     SwapU()
-    Diffuse()
+    Diffuse_U()
 
     Project()
     SwapU()
     
-    Advect()
+    Advect_U()
     Project() 
 
 pixels = ti.field(dtype=ti.f32, shape=(N[0] + 2, N[1] + 2, 3))
