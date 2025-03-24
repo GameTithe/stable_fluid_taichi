@@ -101,7 +101,7 @@ def AddSource_U(mouse_pos: ti.types.vector(2, ti.f32)):
     for i, j in ti.ndrange( (minX, maxX + 1 ), (minY, maxY + 1)): 
         dist = (ti.cast((i - index.x)**2 + (j - index.y)**2, ti.f32))
         if dist <= radius * radius:
-            U1[i, j] += ti.Vector([0.0, dist]) 
+            U1[i, j] += ti.Vector([0.0, dist * 3]) 
         
 @ti.func
 def set_bnd(b: ti.i32, x: ti.template()):
@@ -261,16 +261,15 @@ def vel_step(mouse_pos: ti.types.vector(2, ti.f32), add_force: ti.i32):
     Advect_U()
     Project() 
 
-pixels = ti.field(dtype=ti.f32, shape=(N[0] + 2, N[1] + 2, 3))
+pixels = ti.field(dtype=ti.f32, shape=(N[0] + 2, N[1] + 2, 3))        
 @ti.kernel
-def update_pixcels():
-   # a = 1
+def update_pixels():
     for i, j in ti.ndrange( (1, N[0] + 1), ( 1, N[1] + 1) ):
         density = D0[i ,j][0] 
         pixels[i,j,0] = ti.min(1.0, density)  # R
         pixels[i,j,1] = ti.min(1.0, density * 0.5)  # G
         pixels[i,j,2] = ti.min(1.0, density * 0.2)  # B
-    
+
     
 window = ti.ui.Window("TaichiS Stable Fluid", (1024, 1024),
                       vsync=True)
@@ -284,18 +283,8 @@ current_t = 0.0
 mouse_pos = ti.Vector([0.5, 0.5])
 add_force = False
 
-initialize_2D()
-
-while window.running:
-    # Get mouse position 
-    # for e in window.get_events():
-    #     if window.is_pressed(ti.ui.LMB):  # 마우스 왼쪽 버튼 눌렸을 때
-    #         mx, my = window.get_cursor_pos()
-    #         mouse_pos = ti.Vector([mx, my])
-    #         add_force = True  
-    #     elif not window.is_pressed(ti.ui.LMB):  # 마우스 왼쪽 버튼 떼었을 때
-    #         add_force = False 
-            
+initialize_2D() 
+while window.running: 
     add_force = window.is_pressed(ti.ui.LMB)
     if add_force:
         mx, my = window.get_cursor_pos()
@@ -303,8 +292,9 @@ while window.running:
         
     dens_step(mouse_pos, int(add_force))    
     vel_step(mouse_pos, int(add_force))
+     
+    update_pixels()
     
-    update_pixcels()
     canvas.set_image(pixels)
     
     window.show()
