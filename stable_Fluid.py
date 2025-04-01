@@ -5,7 +5,8 @@ ti.init(arch=ti.gpu)
 
 NDIM = 2 
 
-N = ti.Vector([256, 256])
+N = ti.Vector([1024, 1024])
+
 #grid = ti.Vector.field(NDIM, dtype = ti.i32, shape = (N[0], N[1]))
 divergence = ti.field(dtype = ti.f32, shape = (N[0] + 2, N[1] + 2))
 
@@ -89,23 +90,14 @@ def ForceTerm_U():
         Uy = ( U0[i ,j + 1] - U0[i , j -1]) / (2 * h)
         Ux = ( U0[i + 1,j] - U0[i - 1, j]) / (2 * h)
         U1[i,j] += Uy - Ux 
-    
-@ti.func
-def compute_curl():
-    h = 1.0 / N[0]
-    for i, j in ti.ndrange((1, N[0] + 1), (1, N[1] + 1)):
-        dv_dx = (U0[i + 1, j].x- U0[i - 1, j].x) / (2 * h)  # ∂v/∂x
-        du_dy = (U0[i, j + 1].y - U0[i, j - 1].y) / (2 * h)  # ∂u/∂y
-        
-        W[i, j] = (du_dy - dv_dx)
-        
+   
 @ti.func
 def compute_vorticity():
     h = 1.0 / N[0]
     for i, j in ti.ndrange((1, N[0] + 1), (1, N[1] + 1)):
-        dv_dx = (U0[i + 1, j].y - U0[i - 1, j].y) / (2 * h)  # ∂v/∂x
-        du_dy = (U0[i, j + 1].x - U0[i, j - 1].x) / (2 * h)  # ∂u/∂y
-        W[i, j] = dv_dx - du_dy  # ω = ∂v/∂x - ∂u/∂y
+        dv_dx = (U0[i + 1, j].y - U0[i - 1, j].y) / (2 * h)   
+        du_dy = (U0[i, j + 1].x - U0[i, j - 1].x) / (2 * h)  
+        W[i, j] = dv_dx - du_dy   
         
         
 @ti.func
@@ -120,7 +112,7 @@ def apply_vorticity_confinement():
                          (ti.abs(W[i,j + 1]) - ti.abs(W[i, j - 1])) / (2 * h)
                         ])
           
-        #정규화
+        #정규화 #ti.math.normalize()
         norm = eta.norm()
         N = eta
         if norm > 1e-6:   
@@ -140,7 +132,7 @@ def apply_vorticity_confinement():
 def AddSource_D(mouse_pos: ti.types.vector(2, ti.f32)):
    
     index = ti.cast(mouse_pos * N, ti.i32) 
-    radius = 3
+    radius = 30
     minX = max(index.x - radius, 1)
     minY = max(index.y - radius, 1)  
     maxX = min(index.x + radius, N[0])
@@ -151,14 +143,14 @@ def AddSource_D(mouse_pos: ti.types.vector(2, ti.f32)):
         
         dist = (ti.cast((i - index.x)**2 + (j - index.y)**2, ti.f32))
         if dist <= radius * radius:   
-            D1[i, j] += ti.Vector([dist * 0.1, 0.0])
+            D1[i, j] += ti.Vector([0.08, 0.08])
 
         
 @ti.func
 def AddSource_U(mouse_pos: ti.types.vector(2, ti.f32)):
    
     index = ti.cast(mouse_pos * N, ti.i32) 
-    radius = 2
+    radius = 20
     
     minX = max(index.x - radius, 1)
     minY = max(index.y - radius, 1)  
@@ -169,7 +161,7 @@ def AddSource_U(mouse_pos: ti.types.vector(2, ti.f32)):
     for i, j in ti.ndrange( (minX, maxX + 1 ), (minY, maxY + 1)): 
         dist = (ti.cast((i - index.x)**2 + (j - index.y)**2, ti.f32))
         if dist <= radius * radius:
-            U1[i, j] += ti.Vector([0.0, dist * 2]) 
+            U1[i, j] += ti.Vector([0.0, 2.0]) 
         
 @ti.func
 def set_bnd(b: ti.i32, x: ti.template()):
