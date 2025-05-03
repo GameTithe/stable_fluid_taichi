@@ -1,13 +1,16 @@
 import taichi as ti
 import numpy as np
 
-ti.init(arch=ti.gpu)
+ti.init(arch=ti.gpu)  
+#ti.init(arch=ti.opengl)
+
 
 NDIM = 2 
 
 N = ti.Vector([1024, 1024])
 
-#grid = ti.Vector.field(NDIM, dtype = ti.i32, shape = (N[0], N[1]))
+#grid = ti.Vector.field(NDIM, dtype = ti.i32, shape = (N[0], Np[1]))
+
 divergence = ti.field(dtype = ti.f32, shape = (N[0] + 2, N[1] + 2))
 
 P = ti.field(dtype = ti.f32, shape = (N[0] + 2, N[1] + 2))
@@ -40,7 +43,7 @@ grav2D = ti.Vector([0.0 , -9.8])
 grav3D = ti.Vector([0.0 , -9.8, 0.0])
 
 #diffusion const 
-kd = 0.01
+kd = 0.1
 
 #source const 
 aS = 0.001
@@ -289,6 +292,27 @@ def dens_step(mouse_pos: ti.types.vector(2, ti.f32), add_force: ti.i32):
     Advect_D() 
     SwapD() 
     
+# add Curl
+# @ti.kernel
+# def vel_step(mouse_pos: ti.types.vector(2, ti.f32), add_force: ti.i32):
+    
+#     if add_force: 
+#         AddSource_U(mouse_pos)
+#         SwapU()
+    
+#     Diffuse_U() 
+#     SwapU() 
+    
+#     Advect_U()
+#     SwapU() 
+    
+#     compute_vorticity()
+#     apply_vorticity_confinement()  
+#     SwapU()
+    
+#     Project()      
+#     SwapU()
+    
 @ti.kernel
 def vel_step(mouse_pos: ti.types.vector(2, ti.f32), add_force: ti.i32):
     
@@ -296,20 +320,19 @@ def vel_step(mouse_pos: ti.types.vector(2, ti.f32), add_force: ti.i32):
         AddSource_U(mouse_pos)
         SwapU()
     
-    Diffuse_U() 
-    #Project()
+    Diffuse_U()
     SwapU()
+    
+    # Project()      
+    # SwapU()
     
     Advect_U()
+    SwapU()  
+    
+    Project()    
     SwapU()
     
-    compute_vorticity()
-    apply_vorticity_confinement()  
-    SwapU()
     
-    Project()      
-    SwapU()
-     
     
 pixels = ti.field(dtype=ti.f32, shape=(N[0] + 2, N[1] + 2, 3))
  
