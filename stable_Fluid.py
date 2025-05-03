@@ -106,7 +106,7 @@ def compute_vorticity():
 @ti.func
 def apply_vorticity_confinement():
     h = 1.0 / N[0]
-    epsilon = 0.1  # 소용돌이 보존 강도
+    epsilon = 0.01  # 소용돌이 보존 강도
     for i, j in ti.ndrange((1, N[0] + 1), (1, N[1] + 1)):
         
         
@@ -129,7 +129,7 @@ def apply_vorticity_confinement():
         W3 = ti.Vector([0.0, 0.0, w]) 
         NcW = ti.math.cross(N3, W3)
         F = epsilon * 5 * h * ti.Vector([NcW.x, NcW.y])
-        U1[i, j] += F
+        U1[i, j] = U0[i,j] + F
         
 @ti.func
 def AddSource_D(mouse_pos: ti.types.vector(2, ti.f32)):
@@ -200,7 +200,9 @@ def Project():
         for i, j in ti.ndrange((1, N[0] + 1), (1, N[1] + 1)):
             P[i, j] = (-divergence[i, j] + P[i-1, j] + P[i+1, j] + P[i, j-1] + P[i, j+1]) / 4.0
     set_bnd(0, P)
-    
+
+    for i, j in ti.ndrange((1, N[0] + 1), (1, N[1] + 1)): 
+        U1[i,j] = U0[i,j]
     #
     for i, j in ti.ndrange((1, N[0] + 1), (1, N[1] + 1)): 
         U1[i, j].x += -0.5 * (P[i+1, j] - P[i-1, j]) / h 
@@ -293,6 +295,26 @@ def dens_step(mouse_pos: ti.types.vector(2, ti.f32), add_force: ti.i32):
     SwapD() 
     
 # add Curl
+@ti.kernel
+def vel_step(mouse_pos: ti.types.vector(2, ti.f32), add_force: ti.i32):
+    
+    if add_force: 
+        AddSource_U(mouse_pos)
+        SwapU()
+    
+    Diffuse_U() 
+    SwapU() 
+    
+    Advect_U()
+    SwapU() 
+    
+    compute_vorticity()
+    apply_vorticity_confinement()  
+    SwapU()
+    
+    Project()      
+    SwapU()
+    
 # @ti.kernel
 # def vel_step(mouse_pos: ti.types.vector(2, ti.f32), add_force: ti.i32):
     
@@ -301,36 +323,14 @@ def dens_step(mouse_pos: ti.types.vector(2, ti.f32), add_force: ti.i32):
 #         SwapU()
     
 #     Diffuse_U() 
-#     SwapU() 
-    
-#     Advect_U()
-#     SwapU() 
-    
-#     compute_vorticity()
-#     apply_vorticity_confinement()  
 #     SwapU()
-    
 #     Project()      
 #     SwapU()
     
-@ti.kernel
-def vel_step(mouse_pos: ti.types.vector(2, ti.f32), add_force: ti.i32):
-    
-    if add_force: 
-        AddSource_U(mouse_pos)
-        SwapU()
-    
-    Diffuse_U()
-    SwapU()
-    
-    # Project()      
-    # SwapU()
-    
-    Advect_U()
-    SwapU()  
-    
-    Project()    
-    SwapU()
+#     Advect_U()
+#     SwapU()
+#     Project()  
+#     SwapU()
     
     
     
