@@ -64,6 +64,8 @@ def initialize_2D():
         U0[i,j] = ti.Vector([0, 0])
         U1[i,j] = ti.Vector([0, 0])  
         W[i ,j] = 0.0  
+        
+        
 def SwapU():
     global U0, U1
     U0, U1 = U1, U0
@@ -106,7 +108,7 @@ def compute_vorticity():
 @ti.func
 def apply_vorticity_confinement():
     h = 1.0 / N[0]
-    epsilon = 0.01  # 소용돌이 보존 강도
+    epsilon = 0.05  # 소용돌이 보존 강도
     for i, j in ti.ndrange((1, N[0] + 1), (1, N[1] + 1)):
         
         
@@ -146,7 +148,7 @@ def AddSource_D(mouse_pos: ti.types.vector(2, ti.f32)):
         
         dist = (ti.cast((i - index.x)**2 + (j - index.y)**2, ti.f32))
         if dist <= radius * radius:   
-            D1[i, j] += ti.Vector([0.08, 0.08])
+            D1[i, j] = D0[i,j] + ti.Vector([0.08, 0.08])
 
         
 @ti.func
@@ -164,7 +166,7 @@ def AddSource_U(mouse_pos: ti.types.vector(2, ti.f32)):
     for i, j in ti.ndrange( (minX, maxX + 1 ), (minY, maxY + 1)): 
         dist = (ti.cast((i - index.x)**2 + (j - index.y)**2, ti.f32))
         if dist <= radius * radius:
-            U1[i, j] += ti.Vector([0.0, 2.0]) 
+            U1[i, j] = U0[i,j] + ti.Vector([0.0, 2.0]) 
         
 @ti.func
 def set_bnd(b: ti.i32, x: ti.template()):
@@ -234,6 +236,7 @@ def Advect_D():
         t0 = 1 - t1 
         
         D1[i, j] = s0 * (t0 * D0[i0, j0] + t1 * D0[i0, j1]) + s1 * (t0 * D0[i1, j0] + t1 * D0[i1, j1])
+    
     set_bnd(0, D1)
 
 @ti.func
@@ -252,7 +255,9 @@ def Advect_U():
         s0 = 1 - s1
         t1 = pos.y - j0
         t0 = 1 - t1
+        
         U1[i, j] = s0 * (t0 * U0[i0, j0] + t1 * U0[i0, j1]) + s1 * (t0 * U0[i1, j0] + t1 * U0[i1, j1])
+        
     set_bnd(1, U1)
     set_bnd(2, U1)
  
@@ -262,14 +267,16 @@ def Advect_U():
 def Diffuse_D():
     for k in ti.static(range(20)):
         for i, j in ti.ndrange((1, N[0] + 1), (1, N[1] + 1)):
-            D1[i, j] = (D0[i, j] + kd * (D0[i - 1, j] + D0[i + 1, j] + D0[i, j - 1] + D0[i, j + 1])) / (1 + 4 * kd)
+            D1[i, j] = (D0[i, j] + kd * (D1[i - 1, j] + D1[i + 1, j] + D1[i, j - 1] + D1[i, j + 1])) / (1 + 4 * kd)
+            #D1[i, j] = D0[i,j]
     set_bnd(0, D1)
 
 @ti.func
 def Diffuse_U():
     for k in ti.static(range(20)):
         for i, j in ti.ndrange((1, N[0] + 1), (1, N[1] + 1)):
-            U1[i, j] = (U0[i, j] + visc * (U0[i - 1, j] + U0[i + 1, j] + U0[i, j - 1] + U0[i, j + 1])) / (1 + 4 * visc)
+            U1[i, j] = (U0[i, j] + visc * (U1[i - 1, j] + U1[i + 1, j] + U1[i, j - 1] + U1[i, j + 1])) / (1 + 4 * visc)
+            #U1[i,j] = U0[i,j]       
     set_bnd(1, U1)
     set_bnd(2, U1)
 
@@ -284,7 +291,7 @@ def Diffuse_D_bad():
 @ti.kernel
 def dens_step(mouse_pos: ti.types.vector(2, ti.f32), add_force: ti.i32):
     
-    if add_force:
+    if add_force: 
         AddSource_D(mouse_pos)
         SwapD()
     
@@ -294,27 +301,7 @@ def dens_step(mouse_pos: ti.types.vector(2, ti.f32), add_force: ti.i32):
     Advect_D() 
     SwapD() 
     
-# add Curl
-@ti.kernel
-def vel_step(mouse_pos: ti.types.vector(2, ti.f32), add_force: ti.i32):
-    
-    if add_force: 
-        AddSource_U(mouse_pos)
-        SwapU()
-    
-    Diffuse_U() 
-    SwapU() 
-    
-    Advect_U()
-    SwapU() 
-    
-    compute_vorticity()
-    apply_vorticity_confinement()  
-    SwapU()
-    
-    Project()      
-    SwapU()
-    
+# # add Curl
 # @ti.kernel
 # def vel_step(mouse_pos: ti.types.vector(2, ti.f32), add_force: ti.i32):
     
@@ -323,14 +310,37 @@ def vel_step(mouse_pos: ti.types.vector(2, ti.f32), add_force: ti.i32):
 #         SwapU()
     
 #     Diffuse_U() 
+#     SwapU() 
+    
+#     Advect_U()
+#     SwapU() 
+    
+#     #curl
+#     compute_vorticity()
+#     apply_vorticity_confinement()  
 #     SwapU()
+    
 #     Project()      
 #     SwapU()
     
-#     Advect_U()
-#     SwapU()
-#     Project()  
-#     SwapU()
+@ti.kernel
+def vel_step(mouse_pos: ti.types.vector(2, ti.f32), add_force: ti.i32):
+    
+    if add_force: 
+        AddSource_U(mouse_pos)
+        SwapU()
+    
+    Diffuse_U() 
+    SwapU()
+    
+    Project()      
+    SwapU()
+    
+    Advect_U()
+    SwapU()
+    
+    Project()  
+    SwapU()
     
     
     
