@@ -27,8 +27,10 @@ U0 = ti.Vector.field(NDIM, dtype = ti.f32, shape = (N[0] + 2, N[1] + 2))
 U1 = ti.Vector.field(NDIM, dtype = ti.f32, shape = (N[0] + 2, N[1] + 2))
 
 #density field
-D0 = ti.Vector.field(NDIM, dtype = ti.f32, shape = (N[0] + 2, N[1] + 2))
-D1 = ti.Vector.field(NDIM, dtype = ti.f32, shape = (N[0] + 2, N[1] + 2))
+#D0 = ti.Vector.field(NDIM, dtype = ti.f32, shape = (N[0] + 2, N[1] + 2))
+#D1 = ti.Vector.field(NDIM, dtype = ti.f32, shape = (N[0] + 2, N[1] + 2))
+D0 = ti.field(dtype = ti.f32, shape = (N[0] + 2, N[1] + 2))
+D1 = ti.field(dtype = ti.f32, shape = (N[0] + 2, N[1] + 2))
 
 #source field
 S0 = ti.Vector.field(NDIM, dtype = ti.f32, shape = (1, ))
@@ -59,8 +61,8 @@ def initialize_2D():
     
     #Init Density, Velocity
     for i,j in ti.ndrange((1, N[0] + 1), (1,N[1] + 1)):
-        D0[i,j] = ti.Vector([0, 0])
-        D1[i,j] = ti.Vector([0, 0])
+        D0[i,j] = 0.0
+        D1[i,j] = 0.0
         U0[i,j] = ti.Vector([0, 0])
         U1[i,j] = ti.Vector([0, 0])  
         W[i ,j] = 0.0  
@@ -148,8 +150,8 @@ def AddSource_D(mouse_pos: ti.types.vector(2, ti.f32)):
         
         dist = (ti.cast((i - index.x)**2 + (j - index.y)**2, ti.f32))
         if dist <= radius * radius:   
-            D1[i, j] = D0[i,j] + ti.Vector([0.08, 0.08])
-
+            #D1[i, j] = D0[i,j] + ti.Vector([0.08, 0.08])   
+            D1[i,j] = D0[i,j] + 0.08
         
 @ti.func
 def AddSource_U(mouse_pos: ti.types.vector(2, ti.f32)):
@@ -275,8 +277,7 @@ def Diffuse_D():
 def Diffuse_U():
     for k in ti.static(range(20)):
         for i, j in ti.ndrange((1, N[0] + 1), (1, N[1] + 1)):
-            U1[i, j] = (U0[i, j] + visc * (U1[i - 1, j] + U1[i + 1, j] + U1[i, j - 1] + U1[i, j + 1])) / (1 + 4 * visc)
-            #U1[i,j] = U0[i,j]       
+            U1[i, j] = (U0[i, j] + visc * (U1[i - 1, j] + U1[i + 1, j] + U1[i, j - 1] + U1[i, j + 1])) / (1 + 4 * visc) 
     set_bnd(1, U1)
     set_bnd(2, U1)
 
@@ -351,7 +352,7 @@ pixels = ti.field(dtype=ti.f32, shape=(N[0] + 2, N[1] + 2, 3))
 @ti.kernel
 def update_pixels():
     for i, j in ti.ndrange( (1, N[0] + 1), ( 1, N[1] + 1) ):
-        density = D0[i ,j][0] 
+        density = D0[i ,j]
         pixels[i,j,0] = ti.min(1.0, density)  # R
         pixels[i,j,1] = ti.min(1.0, density * 0.5)  # G
         pixels[i,j,2] = ti.min(1.0, density * 0.2)  # B
